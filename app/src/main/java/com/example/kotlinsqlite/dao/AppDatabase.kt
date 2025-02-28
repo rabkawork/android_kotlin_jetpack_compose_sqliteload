@@ -6,6 +6,7 @@
 package com.example.kotlinsqlite.dao
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -41,18 +42,31 @@ abstract class AppDatabase : RoomDatabase() {
                 // gunakan file tersebut. Jika tidak, gunakan default "item_database.db"
                 val dbFile = databasePath?.let { File(it) }
                 val dbName = if (dbFile != null && dbFile.exists()) {
+                    Log.d("test","masuk ke " + dbFile.absolutePath)
                     // Catatan: Pastikan file berada di lokasi yang diakses oleh Room,
                     // misalnya di context.getDatabasePath()
                     dbFile.absolutePath
+
+
                 } else {
+
+                    Log.d("test","masuk ke item_database.db")
                     "item_database.db"
                 }
+
+//                val instance = Room.databaseBuilder(
+//                    context.applicationContext,
+//                    AppDatabase::class.java,
+//                    dbName
+//                ).build()
+//
 
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    dbName
+                    "item_database.db"
                 ).build()
+
                 INSTANCE = instance
                 instance
             }

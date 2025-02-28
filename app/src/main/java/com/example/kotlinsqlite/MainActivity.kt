@@ -10,6 +10,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -62,7 +63,7 @@ class MainActivity : ComponentActivity() {
 
     // Salin file ke lokasi yang dapat diakses oleh Room
     private fun copyDatabaseToInternalStorage(context: Context, uri: Uri): String? {
-        val destFile = context.getDatabasePath("uploaded_database.db")
+        val destFile = context.getDatabasePath("item_database.db")
         return try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 destFile.outputStream().use { output ->
@@ -215,8 +216,17 @@ fun EditItemDialog(
 
 
 fun exportDatabaseReal(context: Context, databasePath: String?) {
+
+
+    Log.d("test = ",databasePath.toString())
     val sourcePath = databasePath ?: "item_database.db"
-    val sourceFile = File(context.getDatabasePath(sourcePath).absolutePath)
+
+    Log.d("check",sourcePath.toString())
+
+
+//    val sourceFile = File(context.getDatabasePath(sourcePath).absolutePath)
+
+    val sourceFile = context.getDatabasePath("item_database.db")
 
     val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     val timestamp = dateFormat.format(Date())
