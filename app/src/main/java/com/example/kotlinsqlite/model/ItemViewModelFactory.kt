@@ -12,11 +12,13 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.kotlinsqlite.dao.AppDatabase
 import com.example.kotlinsqlite.dao.ItemRepository
 
-class ItemViewModelFactory(context: Context) : ViewModelProvider.Factory {
+class ItemViewModelFactory(private val context: Context, private val databasePath: String? = null) : ViewModelProvider.Factory {
     private val repository: ItemRepository
 
     init {
-        val database = AppDatabase.getDatabase(context)
+//        val database = AppDatabase.getDatabase(context)
+        val database = AppDatabase.getDatabase(context, databasePath)
+
         repository = ItemRepository(database.itemDao())
     }
 

@@ -9,6 +9,8 @@ package com.example.kotlinsqlite
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,31 +29,53 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kotlinsqlite.dao.Item
+//import com.example.kotlinsqlite.dao.exportDatabase
 import com.example.kotlinsqlite.model.ItemViewModel
 import com.example.kotlinsqlite.model.ItemViewModelFactory
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
-    private fun copyDatabaseToAppStorage(context: Context, uri: Uri): File? {
-        val file = File(context.filesDir, "uploaded_database.db")
+//    private fun copyDatabaseToAppStorage(context: Context, uri: Uri): File? {
+//        val file = File(context.filesDir, "uploaded_database.db")
+//        return try {
+//            context.contentResolver.openInputStream(uri)?.use { input ->
+//                file.outputStream().use { output ->
+//                    input.copyTo(output)
+//                }
+//            }
+//            file
+//        } catch (e: IOException) {
+//            e.printStackTrace()
+//            null
+//        }
+//    }
+
+    // Salin file ke lokasi yang dapat diakses oleh Room
+    private fun copyDatabaseToInternalStorage(context: Context, uri: Uri): String? {
+        val destFile = context.getDatabasePath("uploaded_database.db")
         return try {
             context.contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().use { output ->
+                destFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
-            file
+            destFile.absolutePath
         } catch (e: IOException) {
             e.printStackTrace()
             null
         }
     }
+
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,25 +83,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             var databasePath by remember { mutableStateOf("") }
             var isDatabaseImported by remember { mutableStateOf(false) }
-       /*     val filePickerLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.GetContent()
-            ) { uri: Uri? ->
-                uri?.let { selectedUri ->
-                    val file = copyDatabaseToAppStorage(this@MainActivity, selectedUri)
-                    if (file != null) {
-                        databasePath = file.absolutePath
-                        isDatabaseImported = true
-                    }
-                }
-            }*/
 
             val filePickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.OpenDocument()
             ) { uri: Uri? ->
                 uri?.let { selectedUri ->
-                    val file = copyDatabaseToAppStorage(this@MainActivity, selectedUri)
+                    val file = copyDatabaseToInternalStorage(this@MainActivity, selectedUri)
                     if (file != null) {
-                        databasePath = file.absolutePath
+                        databasePath = file
                         isDatabaseImported = true
                     }
                 }
@@ -97,7 +110,7 @@ class MainActivity : ComponentActivity() {
                 }
             ) { paddingValues ->
                 if (isDatabaseImported) {
-                    ItemListScreen(context = applicationContext)
+                    ItemListScreen(context = applicationContext, databasePath)
                 } else {
                     Column(
                         modifier = Modifier
@@ -151,8 +164,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-
-
 @Composable
 fun EditItemDialog(
     item: Item,
@@ -203,10 +214,39 @@ fun EditItemDialog(
 
 
 
+fun exportDatabaseReal(context: Context, databasePath: String?) {
+    val sourcePath = databasePath ?: "item_database.db"
+    val sourceFile = File(context.getDatabasePath(sourcePath).absolutePath)
+
+    val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+    val timestamp = dateFormat.format(Date())
+    val destFile = File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        "exported_$timestamp.db"
+    )
+
+    try {
+        if (sourceFile.exists()) {
+            sourceFile.copyTo(destFile, overwrite = true)
+            Toast.makeText(context, "Database berhasil diekspor ke folder Downloads", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(context, "Database tidak ditemukan!", Toast.LENGTH_LONG).show()
+        }
+    } catch (e: IOException) {
+        e.printStackTrace()
+        Toast.makeText(context, "Gagal mengekspor database", Toast.LENGTH_LONG).show()
+    }
+}
+
+
+
 
 @Composable
-fun ItemListScreen(context: Context) {
-    val viewModel: ItemViewModel = viewModel(factory = ItemViewModelFactory(context))
+fun ItemListScreen(context: Context, databasePath: String?) {
+//    val viewModel: ItemViewModel = viewModel(factory = ItemViewModelFactory(context))
+
+    val viewModel: ItemViewModel = viewModel(factory = ItemViewModelFactory(context, databasePath))
+
     val items by viewModel.items.collectAsState()
 
     var itemName by remember { mutableStateOf("") }
@@ -217,11 +257,11 @@ fun ItemListScreen(context: Context) {
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp) // Beri jarak antar elemen
+        verticalArrangement = Arrangement.spacedBy(8.dp) // Beri jarak antar elemen
     ) {
 
 
-        Spacer(modifier = Modifier.height(55.dp)) // Beri jarak sebelum daftar item
+        Spacer(modifier = Modifier.height(59.dp)) // Beri jarak sebelum daftar item
 
         Column(
             modifier = Modifier
@@ -231,7 +271,7 @@ fun ItemListScreen(context: Context) {
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
 
-            Text(text = "Tambah Item", style = MaterialTheme.typography.titleLarge)
+            Text(text = "Form Rokok", style = MaterialTheme.typography.titleLarge)
 
             OutlinedTextField(
                 value = itemName,
@@ -266,8 +306,18 @@ fun ItemListScreen(context: Context) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Add Item")
+                Text("Simpan")
             }
+
+            Button(
+                onClick = {
+                    exportDatabaseReal(context, databasePath)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Export database")
+            }
+
 
 
         }
@@ -281,6 +331,8 @@ fun ItemListScreen(context: Context) {
             )
         }
 
+
+        Spacer(modifier = Modifier.height(8.dp)) // Kurangi jarak sebelum daftar item
         Text(text = "Daftar Item", style = MaterialTheme.typography.titleMedium)
 
         LazyColumn(
@@ -308,11 +360,22 @@ fun ItemListScreen(context: Context) {
                         }
 
                         Row {
-                            Button(onClick = { selectedItem = item }) {
+                            Button(onClick = { selectedItem = item },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.LightGray, // Warna latar belakang merah
+                                    contentColor = Color.White  // Warna teks putih agar kontras
+                                )
+                                ) {
                                 Text("Edit")
                             }
                             Spacer(modifier = Modifier.width(4.dp))
-                            Button(onClick = { viewModel.deleteItem(item) }) {
+                            Button(onClick = { viewModel.deleteItem(item) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Red, // Warna latar belakang merah
+                                    contentColor = Color.White  // Warna teks putih agar kontras
+                                )
+
+                                ) {
                                 Text("Delete")
                             }
                         }

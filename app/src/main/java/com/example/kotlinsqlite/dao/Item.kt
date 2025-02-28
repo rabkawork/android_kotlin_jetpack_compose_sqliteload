@@ -38,6 +38,7 @@ interface ItemDao {
 }
 
 
+/*
 // Export Database
 fun exportDatabase(context: Context) {
     val sourceFile = File(context.filesDir, "uploaded_database.db")
@@ -49,3 +50,4 @@ fun exportDatabase(context: Context) {
         Toast.makeText(context, "Export failed", Toast.LENGTH_LONG).show()
     }
 }
+*/
