@@ -179,7 +179,7 @@ fun EditItemDialog(
         text = {
             Column {
                 OutlinedTextField(
-                    value = newName,
+                    value = newName.toString(),
                     onValueChange = { newName = it },
                     label = { Text("Item Name") },
                     modifier = Modifier.fillMaxWidth()
