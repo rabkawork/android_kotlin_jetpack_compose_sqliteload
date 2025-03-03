@@ -12,18 +12,26 @@ abstract class ItemDatabase : RoomDatabase() {
 
     companion object {
         @Volatile
-        private var INSTANCE: ItemDatabase? = null
+        private var INSTANCE: AppDatabase? = null
 
-        fun getDatabase(context: Context): ItemDatabase {
+        fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
-                    ItemDatabase::class.java,
+                    AppDatabase::class.java,
                     "item_database.db"
-                ).build()
+                ).fallbackToDestructiveMigration() // Jika ada perubahan versi DB, database akan di-reset
+                    .allowMainThreadQueries() // (Opsional) Hanya gunakan ini untuk testing!
+                    .build()
+
                 INSTANCE = instance
                 instance
             }
         }
+
+        fun destroyInstance() {
+            INSTANCE = null
+        }
     }
 }
+

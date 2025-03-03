@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
 
 class ItemViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val database = ItemDatabase.getDatabase(application)
+    private val database = ItemDatabase.getInstance(application)
     private val itemDao = database.itemDao()
 
     // Menggunakan StateFlow untuk menyimpan dan mengembalikan daftar item

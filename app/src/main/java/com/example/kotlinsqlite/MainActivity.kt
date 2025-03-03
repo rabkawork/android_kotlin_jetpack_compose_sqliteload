@@ -30,11 +30,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kotlinsqlite.dao.Item
+import com.example.kotlinsqlite.dao.ItemDatabase
 import com.example.kotlinsqlite.model.ItemViewModel
 import com.example.kotlinsqlite.utils.FileUtils
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,7 +44,7 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
 
     // Salin file ke lokasi yang dapat diakses oleh Room
-    private fun copyDatabaseToInternalStorage(context: Context, uri: Uri): String? {
+    /*private fun copyDatabaseToInternalStorage(context: Context, uri: Uri): String? {
         val destFile = context.getDatabasePath("item_database.db")
         return try {
             context.contentResolver.openInputStream(uri)?.use { input ->
@@ -56,12 +58,66 @@ class MainActivity : ComponentActivity() {
             null
         }
     }
+    */
+
+    private fun isValidSQLiteDatabase(inputStream: InputStream): Boolean {
+        return try {
+            val buffer = ByteArray(16)
+            inputStream.read(buffer, 0, 16)
+            val header = String(buffer, Charsets.US_ASCII)
+            header.startsWith("SQLite format 3")
+        } catch (e: IOException) {
+            false
+        }
+    }
+
+    fun restartRoomDatabase(context: Context) {
+        ItemDatabase.destroyInstance() // Hancurkan instance lama
+        ItemDatabase.getInstance(context) // Buat ulang instance baru
+    }
+
+    private fun copyDatabaseToInternalStorage(context: Context, uri: Uri): String? {
+        val dbName = "item_database.db" // Nama database yang disimpan
+        val destFile = context.getDatabasePath(dbName) // Lokasi database di internal storage
+
+        // Cek apakah file yang akan ditimpa sudah ada
+        Log.d("Database Path", "Database akan disimpan di: ${destFile.absolutePath}")
+
+        return try {
+            // Pastikan file yang diunggah adalah database SQLite
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                if (!isValidSQLiteDatabase(input)) {
+                    Log.e("Database Copy", "File yang diunggah bukan database SQLite yang valid!")
+                    Toast.makeText(context, "File bukan database SQLite!", Toast.LENGTH_LONG).show()
+                    return null
+                }
+            }
+
+            // Salin database dari URI ke lokasi internal storage
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            Log.d("Database Copy", "Database berhasil disalin ke: ${destFile.absolutePath}")
+            Toast.makeText(context, "Database berhasil diimpor!", Toast.LENGTH_SHORT).show()
+
+            return destFile.absolutePath
+        } catch (e: IOException) {
+            Log.e("Database Copy", "Gagal menyalin database: ${e.message}", e)
+            Toast.makeText(context, "Gagal mengimpor database!", Toast.LENGTH_LONG).show()
+            null
+        }
+    }
+
+
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var databasePath by remember { mutableStateOf("") }
+         /*   var databasePath by remember { mutableStateOf("") }
             var isDatabaseImported by remember { mutableStateOf(false) }
 
             val filePickerLauncher = rememberLauncherForActivityResult(
@@ -69,6 +125,10 @@ class MainActivity : ComponentActivity() {
             ) { uri: Uri? ->
                 uri?.let { selectedUri ->
                     val file = copyDatabaseToInternalStorage(this@MainActivity, selectedUri)
+                    Log.d("test",selectedUri.toString())
+
+                    restartRoomDatabase(this@MainActivity) // Restart agar pakai database hasil impor
+
                     if (file != null) {
                         databasePath = file
                         isDatabaseImported = true
@@ -82,7 +142,7 @@ class MainActivity : ComponentActivity() {
                     TopAppBar(
                         title = { Text("Research Inodigi - Library SQLITE") },
                         navigationIcon = {
-                            IconButton(onClick = { /* TODO: Navigasi ke Home */ }) {
+                            IconButton(onClick = { *//* TODO: Navigasi ke Home *//* }) {
                                 Icon(imageVector = Icons.Default.Home, contentDescription = "Home")
                             }
                         }
@@ -140,7 +200,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-            }
+            }*/
+
+            MainScreen()
         }
     }
 }
@@ -193,33 +255,6 @@ fun EditItemDialog(
     )
 }
 
-fun exportDatabaseReal(context: Context, databasePath: String?) {
-    Log.d("test = ",databasePath.toString())
-    val sourcePath = databasePath ?: "item_database.db"
-
-    Log.d("check",sourcePath.toString())
-
-    val sourceFile = context.getDatabasePath("item_database.db")
-
-    val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-    val timestamp = dateFormat.format(Date())
-    val destFile = File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        "exported_$timestamp.db"
-    )
-
-    try {
-        if (sourceFile.exists()) {
-            sourceFile.copyTo(destFile, overwrite = true)
-            Toast.makeText(context, "Database berhasil diekspor ke folder Downloads", Toast.LENGTH_LONG).show()
-        } else {
-            Toast.makeText(context, "Database tidak ditemukan!", Toast.LENGTH_LONG).show()
-        }
-    } catch (e: IOException) {
-        e.printStackTrace()
-        Toast.makeText(context, "Gagal mengekspor database", Toast.LENGTH_LONG).show()
-    }
-}
 
 @Composable
 fun ItemListScreen(viewModel: ItemViewModel, paddingValues: PaddingValues = PaddingValues()) {
@@ -295,16 +330,23 @@ fun ItemListScreen(viewModel: ItemViewModel, paddingValues: PaddingValues = Padd
                 Text("Simpan")
             }
 
-            Button(
-                onClick = {
-                    coroutineScope.launch {
-                        FileUtils.exportDatabase(context, "item_database.db")
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
+//            Button(
+//                onClick = {
+//                    coroutineScope.launch {
+//                        FileUtils.exportDatabase(context, "item_database.db")
+//                    }
+//                },
+//                modifier = Modifier.fillMaxWidth()
+//            ) {
+//                Text("Export Database")
+//            }
+
+            Button(onClick = { FileUtils.exportDatabaseReal(context, "item_database.db") }) {
                 Text("Export Database")
             }
+
+
+
         }
 
         selectedItem?.let { item ->
