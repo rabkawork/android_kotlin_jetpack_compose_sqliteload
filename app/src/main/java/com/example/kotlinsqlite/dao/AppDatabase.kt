@@ -20,22 +20,6 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        /*fun getDatabase(context: Context, databasePath: String? = null): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val dbFile = databasePath?.let { File(it) }
-                val dbName = if (dbFile != null && dbFile.exists()) databasePath else "item_database.db"
-
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    dbName
-                ).build()
-
-                INSTANCE = instance
-                instance
-            }
-        }*/
-
         fun getDatabase(context: Context, databasePath: String? = null): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // Jika ada path file database yang diimport dan file tersebut ada,
@@ -54,12 +38,6 @@ abstract class AppDatabase : RoomDatabase() {
                     "item_database.db"
                 }
 
-//                val instance = Room.databaseBuilder(
-//                    context.applicationContext,
-//                    AppDatabase::class.java,
-//                    dbName
-//                ).build()
-//
 
                 val instance = Room.databaseBuilder(
                     context.applicationContext,

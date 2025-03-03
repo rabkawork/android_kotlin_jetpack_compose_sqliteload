@@ -1,10 +1,4 @@
-/***
- * @author: Ahadian Akbar
- * @date : 28 Feb 2024
- */
-
 package com.example.kotlinsqlite
-
 
 import android.content.Context
 import android.net.Uri
@@ -31,13 +25,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kotlinsqlite.dao.Item
-//import com.example.kotlinsqlite.dao.exportDatabase
 import com.example.kotlinsqlite.model.ItemViewModel
-import com.example.kotlinsqlite.model.ItemViewModelFactory
+import com.example.kotlinsqlite.utils.FileUtils
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -45,21 +40,6 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
-
-//    private fun copyDatabaseToAppStorage(context: Context, uri: Uri): File? {
-//        val file = File(context.filesDir, "uploaded_database.db")
-//        return try {
-//            context.contentResolver.openInputStream(uri)?.use { input ->
-//                file.outputStream().use { output ->
-//                    input.copyTo(output)
-//                }
-//            }
-//            file
-//        } catch (e: IOException) {
-//            e.printStackTrace()
-//            null
-//        }
-//    }
 
     // Salin file ke lokasi yang dapat diakses oleh Room
     private fun copyDatabaseToInternalStorage(context: Context, uri: Uri): String? {
@@ -76,7 +56,6 @@ class MainActivity : ComponentActivity() {
             null
         }
     }
-
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,7 +75,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-
+            val context = LocalContext.current
 
             Scaffold(
                 topBar = {
@@ -111,7 +90,8 @@ class MainActivity : ComponentActivity() {
                 }
             ) { paddingValues ->
                 if (isDatabaseImported) {
-                    ItemListScreen(context = applicationContext, databasePath)
+                    val viewModel: ItemViewModel = viewModel()
+                    ItemListScreen(viewModel, paddingValues)
                 } else {
                     Column(
                         modifier = Modifier
@@ -134,10 +114,10 @@ class MainActivity : ComponentActivity() {
                                     text = "Upload Database",
                                     style = MaterialTheme.typography.headlineSmall
                                 )
+
                                 Button(
-//                                    onClick = { filePickerLauncher.launch("application/x-sqlite3") },
                                     onClick = {
-                                        filePickerLauncher.launch(arrayOf("application/octet-stream")) // Format SQLite sering terdeteksi sebagai ini
+                                        filePickerLauncher.launch(arrayOf("application/octet-stream"))
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
@@ -213,18 +193,11 @@ fun EditItemDialog(
     )
 }
 
-
-
 fun exportDatabaseReal(context: Context, databasePath: String?) {
-
-
     Log.d("test = ",databasePath.toString())
     val sourcePath = databasePath ?: "item_database.db"
 
     Log.d("check",sourcePath.toString())
-
-
-//    val sourceFile = File(context.getDatabasePath(sourcePath).absolutePath)
 
     val sourceFile = context.getDatabasePath("item_database.db")
 
@@ -248,39 +221,40 @@ fun exportDatabaseReal(context: Context, databasePath: String?) {
     }
 }
 
-
-
-
 @Composable
-fun ItemListScreen(context: Context, databasePath: String?) {
-//    val viewModel: ItemViewModel = viewModel(factory = ItemViewModelFactory(context))
+fun ItemListScreen(viewModel: ItemViewModel, paddingValues: PaddingValues = PaddingValues()) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
-    val viewModel: ItemViewModel = viewModel(factory = ItemViewModelFactory(context, databasePath))
-
-    val items by viewModel.items.collectAsState()
+    // Menggunakan collectAsState untuk mengamati perubahan data dari Flow
+    val items by viewModel.allItems.collectAsState(initial = emptyList())
 
     var itemName by remember { mutableStateOf("") }
     var itemQuantity by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
+    var selectedItem by remember { mutableStateOf<Item?>(null) }
+
+    // Inisialisasi data saat layar pertama kali dibuka
+    LaunchedEffect(key1 = Unit) {
+        viewModel.loadItems()
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(paddingValues)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp) // Beri jarak antar elemen
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-
-
-        Spacer(modifier = Modifier.height(59.dp)) // Beri jarak sebelum daftar item
+        Spacer(modifier = Modifier.height(8.dp))
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f) // Membantu form tetap terlihat
+                .weight(1f)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-
             Text(text = "Form Rokok", style = MaterialTheme.typography.titleLarge)
 
             OutlinedTextField(
@@ -308,10 +282,12 @@ fun ItemListScreen(context: Context, databasePath: String?) {
                     if (itemName.isBlank() || quantity == null || quantity <= 0) {
                         errorMessage = "Nama item tidak boleh kosong dan jumlah harus angka positif"
                     } else {
-                        viewModel.addItem(itemName, quantity)
-                        itemName = ""
-                        itemQuantity = ""
-                        errorMessage = ""
+                        coroutineScope.launch {
+                            viewModel.addItem(itemName, quantity)
+                            itemName = ""
+                            itemQuantity = ""
+                            errorMessage = ""
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -321,28 +297,29 @@ fun ItemListScreen(context: Context, databasePath: String?) {
 
             Button(
                 onClick = {
-                    exportDatabaseReal(context, databasePath)
+                    coroutineScope.launch {
+                        FileUtils.exportDatabase(context, "item_database.db")
+                    }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Export database")
+                Text("Export Database")
             }
-
-
-
         }
-        var selectedItem by remember { mutableStateOf<Item?>(null) }
 
         selectedItem?.let { item ->
             EditItemDialog(
                 item = item,
                 onDismiss = { selectedItem = null },
-                onUpdate = { updatedItem -> viewModel.updateItem(updatedItem) }
+                onUpdate = { updatedItem ->
+                    coroutineScope.launch {
+                        viewModel.updateItem(updatedItem)
+                    }
+                }
             )
         }
 
-
-        Spacer(modifier = Modifier.height(8.dp)) // Kurangi jarak sebelum daftar item
+        Spacer(modifier = Modifier.height(8.dp))
         Text(text = "Daftar Item", style = MaterialTheme.typography.titleMedium)
 
         LazyColumn(
@@ -370,22 +347,27 @@ fun ItemListScreen(context: Context, databasePath: String?) {
                         }
 
                         Row {
-                            Button(onClick = { selectedItem = item },
+                            Button(
+                                onClick = { selectedItem = item },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.LightGray, // Warna latar belakang merah
-                                    contentColor = Color.White  // Warna teks putih agar kontras
+                                    containerColor = Color.LightGray,
+                                    contentColor = Color.White
                                 )
-                                ) {
+                            ) {
                                 Text("Edit")
                             }
                             Spacer(modifier = Modifier.width(4.dp))
-                            Button(onClick = { viewModel.deleteItem(item) },
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        viewModel.deleteItem(item)
+                                    }
+                                },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.Red, // Warna latar belakang merah
-                                    contentColor = Color.White  // Warna teks putih agar kontras
+                                    containerColor = Color.Red,
+                                    contentColor = Color.White
                                 )
-
-                                ) {
+                            ) {
                                 Text("Delete")
                             }
                         }
@@ -395,6 +377,3 @@ fun ItemListScreen(context: Context, databasePath: String?) {
         }
     }
 }
-
-
-

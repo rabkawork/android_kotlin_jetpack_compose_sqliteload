@@ -5,23 +5,9 @@
 
 package com.example.kotlinsqlite.dao
 
-import com.example.kotlinsqlite.dao.ItemDao
-import kotlinx.coroutines.flow.Flow
-
-class ItemRepository(private val itemDao: ItemDao) {
-
-    val allItems: Flow<List<Item>> = itemDao.getAllItems()
-
-    suspend fun addItem(name: String, quantity: Int) {
-        val newItem = Item(name = name, quantity = quantity)
-        itemDao.insertItem(newItem)
-    }
-
-    suspend fun deleteItem(item: Item) {
-        itemDao.deleteItem(item)
-    }
-
-    suspend fun updateItem(item: Item) {
-        itemDao.updateItem(item)
-    }
+class ItemRepository(private val ItemDao: ItemDao) {
+    suspend fun getAllItems() = ItemDao.getAllItems()
+    suspend fun insertItem(item: Item) = ItemDao.insert(item)
+    suspend fun updateItem(item: Item) = ItemDao.update(item)
+    suspend fun deleteItem(item: Item) = ItemDao.delete(item)
 }
