@@ -6,6 +6,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
@@ -35,13 +36,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileInputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 @Entity(tableName = "master_produk")
@@ -157,6 +164,51 @@ abstract class ProdukDatabase : RoomDatabase() {
             INSTANCE = null
             Log.d("ProdukDatabase", "Database ditutup dan INSTANCE di-reset")
         }
+
+        fun exportDatabase(context: Context) {
+            val timestamp = SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).format(Date())
+            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val backupDir = File(downloadDir, timestamp)
+
+            if (!backupDir.exists()) {
+                backupDir.mkdirs()
+            }
+
+            val dbPath = context.getDatabasePath("produk.db").absolutePath
+            val dbFiles = listOf(
+                "produk.db",
+                "produk.db-shm",
+                "produk.db-wal"
+            )
+
+            dbFiles.forEach { fileName ->
+                val sourceFile = File(context.getDatabasePath("produk.db").parent, fileName)
+                val destFile = File(backupDir, fileName)
+
+                if (sourceFile.exists()) {
+                    try {
+                        FileInputStream(sourceFile).use { input ->
+                            FileOutputStream(destFile).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        Log.d("ExportDatabase", "Berhasil menyalin $fileName ke ${destFile.absolutePath}")
+                        Toast.makeText(context, "Berhasil menyalin $fileName ke ${destFile.absolutePath}", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+
+
+                        Log.e("ExportDatabase", "Gagal menyalin $fileName: ${e.message}")
+
+                        Toast.makeText(context, "Gagal menyalin $fileName: ${e.message}", Toast.LENGTH_SHORT).show()
+
+                    }
+                } else {
+                    Log.w("ExportDatabase", "File $fileName tidak ditemukan, dilewati")
+                    Toast.makeText(context, "File $fileName tidak ditemukan, dilewati", Toast.LENGTH_SHORT).show()
+
+                }
+            }
+        }
     }
 }
 
@@ -196,19 +248,47 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
                 }
             )
         }, floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showDialog = true },
-                containerColor = Color(0xFF00796B), // Warna hijau elegan
-                contentColor = Color.White,
-                shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(8.dp)
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomEnd // Menempatkan FAB di pojok kanan bawah
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Tambah Produk",
-                    modifier = Modifier.size(28.dp)
-                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp), // Jarak antar FAB
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(end = 16.dp, bottom = 16.dp)
+                ) {
+                    FloatingActionButton(
+                        onClick = { showDialog = true },
+                        containerColor = Color(0xFF00796B), // Warna hijau elegan
+                        contentColor = Color.White,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Tambah Produk",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    FloatingActionButton(
+                        onClick = { /* Tambahkan logika ekspor di sini */
+                            ProdukDatabase.exportDatabase(context)
+                        },
+                        containerColor = Color(0xFF0288D1), // Warna biru untuk eksport
+                        contentColor = Color.White,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share, // Ikon ekspor
+                            contentDescription = "Export Data",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
             }
+
         }
     ) { padding ->
         /*LazyColumn(contentPadding = padding) {
