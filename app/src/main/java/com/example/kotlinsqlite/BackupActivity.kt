@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 
 import android.util.Log
 import android.widget.Toast
+import java.io.File
 
 
 @Entity(tableName = "master_produk")
@@ -43,7 +44,18 @@ data class Produk(
 interface ProdukDao {
     @Query("SELECT * FROM master_produk")
     fun getAllProduk(): LiveData<List<Produk>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProduk(produk: Produk)
+
+    @Update
+    suspend fun updateProduk(produk: Produk)
+
+    @Delete
+    suspend fun deleteProduk(produk: Produk)
 }
+
+
 
 @Database(entities = [Produk::class], version = 1, exportSchema = false)
 abstract class ProdukDatabase : RoomDatabase() {
@@ -74,7 +86,29 @@ abstract class ProdukDatabase : RoomDatabase() {
 
         fun replaceDatabase(context: Context, uri: Uri) {
             val dbFile = context.getDatabasePath("produk.db")
+
+            val shmFile = File(dbFile.absolutePath + "-shm")
+            val walFile = File(dbFile.absolutePath + "-wal")
+
+
+
             try {
+
+                // Hapus database lama jika ada
+                if (dbFile.exists()) {
+                    dbFile.delete()
+                    Log.d("ProdukDatabase", "Database lama dihapus")
+                }
+                if (shmFile.exists()) {
+                    shmFile.delete()
+                    Log.d("ProdukDatabase", "File shm dihapus")
+                }
+                if (walFile.exists()) {
+                    walFile.delete()
+                    Log.d("ProdukDatabase", "File wal dihapus")
+                }
+
+
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     FileOutputStream(dbFile).use { outputStream ->
                         inputStream.copyTo(outputStream)
