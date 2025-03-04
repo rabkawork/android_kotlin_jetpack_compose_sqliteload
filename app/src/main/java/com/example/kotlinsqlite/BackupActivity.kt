@@ -1,11 +1,14 @@
 package com.example.kotlinsqlite
 
+import android.app.DownloadManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.ExperimentalMaterial3Api
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,16 +33,22 @@ import androidx.compose.ui.platform.LocalContext
 
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -209,8 +218,149 @@ abstract class ProdukDatabase : RoomDatabase() {
                 }
             }
         }
+
+
+        fun moveDatabaseFile(context: Context, fileUri: Uri, fileName: String) {
+            val databasePath = File(context.getDatabasePath("produk.db").parent) // Lokasi database
+            val newDatabaseFile = File(databasePath, "produk.db")
+
+            try {
+                context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
+                    // Hapus database lama sebelum mengganti
+                    deleteOldDatabase(databasePath)
+
+                    // Copy file ke lokasi database aplikasi
+                    FileOutputStream(newDatabaseFile).use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+
+                    Log.d("Database", "File SQLite berhasil disalin ke: ${newDatabaseFile.absolutePath}")
+
+
+
+                    Log.d("Database", "File SQLite berhasil disalin ke: ${newDatabaseFile.absolutePath}")
+
+                    // **Panggil reopenDatabase() setelah penggantian selesai**
+                    reopenDatabase(context)
+
+
+                }
+            } catch (e: Exception) {
+                Log.e("Database", "Gagal memindahkan file database: ${e.message}")
+            }
+        }
+
+        fun deleteOldDatabase(databasePath: File) {
+            val filesToDelete = listOf("produk.db", "produk.db-shm", "produk.db-wal")
+            for (fileName in filesToDelete) {
+                val file = File(databasePath, fileName)
+                if (file.exists()) {
+                    file.delete()
+                    Log.d("Database", "Deleted: ${file.absolutePath}")
+                }
+            }
+        }
+
+        fun reopenDatabase(context: Context) {
+            val dbPath = context.getDatabasePath("produk.db")
+            if (dbPath.exists()) {
+                Log.d("Database", "Database berhasil diganti, siap digunakan!")
+                // Tambahkan kode untuk membuka database dan membaca data di sini
+            } else {
+                Log.e("Database", "Database tidak ditemukan setelah proses penggantian!")
+            }
+        }
     }
 }
+
+
+//fun downloadAndReplaceDatabase(context: Context, fileUrl: String, fileName: String) {
+//    val request = DownloadManager.Request(Uri.parse(fileUrl))
+//        .setTitle("Downloading SQLite Database")
+//        .setDescription("Downloading $fileName")
+//        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+//        .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
+//
+//    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+//    val downloadId = downloadManager.enqueue(request)
+//
+//    // Cek jika download selesai
+//    val query = DownloadManager.Query().setFilterById(downloadId)
+//    val cursor = downloadManager.query(query)
+//
+//    if (cursor.moveToFirst()) {
+//        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+//        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+//            val uriString = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+//            uriString?.let { ProdukDatabase.moveDatabaseFile(context, Uri.parse(it), fileName) }
+//        }
+//    }
+//    cursor.close()
+//}
+
+
+fun downloadAndReplaceDatabase(context: Context, fileUrl: String, fileName: String) {
+    try {
+        val request = DownloadManager.Request(Uri.parse(fileUrl))
+            .setTitle("Downloading SQLite Database")
+            .setDescription("Downloading $fileName")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+
+        try {
+            val downloadId = downloadManager.enqueue(request)
+
+            // Monitor download status
+            val query = DownloadManager.Query().setFilterById(downloadId)
+            Thread {
+                var downloading = true
+                while (downloading) {
+                    val cursor = downloadManager.query(query)
+                    cursor.moveToFirst()
+
+                    if (cursor.count > 0) {
+                        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                        when (status) {
+                            DownloadManager.STATUS_SUCCESSFUL -> {
+                                downloading = false
+                                val uriString = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                                uriString?.let {
+                                    (context as? ComponentActivity)?.runOnUiThread {
+                                        ProdukDatabase.moveDatabaseFile(context, Uri.parse(it), fileName)
+                                        Toast.makeText(context, "Download berhasil", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            DownloadManager.STATUS_FAILED -> {
+                                downloading = false
+                                (context as? ComponentActivity)?.runOnUiThread {
+                                    Toast.makeText(context, "Download gagal", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                    cursor.close()
+                    Thread.sleep(1000)
+                }
+            }.start()
+
+        } catch (e: SecurityException) {
+            Log.e("Download", "Security Exception: ${e.message}")
+            Toast.makeText(context, "Error: Tidak ada izin untuk download", Toast.LENGTH_LONG).show()
+        }
+
+    } catch (e: Exception) {
+        Log.e("Download", "Error: ${e.message}")
+        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -242,8 +392,55 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
             TopAppBar(
                 title = { Text("Daftar Produk") },
                 actions = {
-                    Button(onClick = { filePickerLauncher.launch("*/*") }) {
-                        Text("Import SQLITE")
+//                    Button(onClick = { filePickerLauncher.launch("*/*") }) {
+//                        Text("Import SQLITE")
+//                    }
+//
+//                    Button(onClick = {
+//                        val fileUrl = "http://192.168.2.116:3000/download/produk.db"
+//                        val fileName = "produk.db"
+//                        downloadAndReplaceDatabase(context, fileUrl, fileName)
+//                    }) {
+//                        Text("Download")
+//                    }
+
+                    Row(
+                        modifier = Modifier.padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.LightGray)
+                    ) {
+                        IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                            Icon(
+                                imageVector = Icons.Default.AddCircle,
+                                contentDescription = "Import SQLITE",
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Green)
+                        ) {
+                            IconButton(onClick = {
+                                val fileUrl = "http://192.168.2.116:3000/download/produk.db"
+//                                val fileUrl = "http://10.0.2.2:3000/download/produk.db"
+                                val fileName = "produk.db"
+                                downloadAndReplaceDatabase(context, fileUrl, fileName)
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.MailOutline,
+                                    contentDescription = "Download",
+                                    tint = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -291,17 +488,6 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
 
         }
     ) { padding ->
-        /*LazyColumn(contentPadding = padding) {
-            items(produkList) { produk ->
-                Card(
-                    modifier = Modifier.padding(8.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Text(text = "${produk.nama} - Qty: ${produk.quantity}", modifier = Modifier.padding(16.dp))
-                }
-            }
-        }*/
-
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -438,8 +624,40 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
 }
 
 class BackupActivity : ComponentActivity() {
+
+
+    private val PERMISSION_REQUEST_CODE = 123
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.all { it.value }) {
+            Toast.makeText(this, "Semua izin diberikan", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Beberapa izin ditolak", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val permissions = arrayOf(
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.INTERNET
+            )
+
+            val permissionsToRequest = permissions.filter {
+                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            }.toTypedArray()
+
+            if (permissionsToRequest.isNotEmpty()) {
+                requestPermissionLauncher.launch(permissionsToRequest)
+            }
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        checkPermissions()
 
         setContent {
             var db by remember { mutableStateOf(ProdukDatabase.getDatabase(this)) }
