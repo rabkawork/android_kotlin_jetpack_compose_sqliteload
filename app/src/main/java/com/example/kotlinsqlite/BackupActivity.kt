@@ -29,6 +29,18 @@ import androidx.compose.ui.platform.LocalContext
 
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.launch
 import java.io.File
 
 
@@ -158,6 +170,14 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
     val produkList by produkDao.getAllProduk().observeAsState(initial = emptyList())
     val context = LocalContext.current
 
+    val scope = rememberCoroutineScope()
+
+    var showDialog by remember { mutableStateOf(false) }
+    var namaProduk by remember { mutableStateOf("") }
+    var quantityProduk by remember { mutableStateOf("") }
+    var editingProduk: Produk? by remember { mutableStateOf(null) }
+
+
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             ProdukDatabase.replaceDatabase(context, it) // Gunakan context dari LocalContext
@@ -171,13 +191,27 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
                 title = { Text("Daftar Produk") },
                 actions = {
                     Button(onClick = { filePickerLauncher.launch("*/*") }) {
-                        Text("Upload DB")
+                        Text("Import SQLITE")
                     }
                 }
             )
+        }, floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showDialog = true },
+                containerColor = Color(0xFF00796B), // Warna hijau elegan
+                contentColor = Color.White,
+                shape = CircleShape,
+                elevation = FloatingActionButtonDefaults.elevation(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Tambah Produk",
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
     ) { padding ->
-        LazyColumn(contentPadding = padding) {
+        /*LazyColumn(contentPadding = padding) {
             items(produkList) { produk ->
                 Card(
                     modifier = Modifier.padding(8.dp),
@@ -186,7 +220,140 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
                     Text(text = "${produk.nama} - Qty: ${produk.quantity}", modifier = Modifier.padding(16.dp))
                 }
             }
+        }*/
+
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize() // Pastikan mengisi layar
+                .padding(padding) // Gunakan padding dari Scaffold agar tidak tertutup TopBar
+                .padding(bottom = 80.dp) // Tambah margin bawah untuk FAB
+        ) {
+            items(produkList) { produk ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            namaProduk = produk.nama
+                            quantityProduk = produk.quantity.toString()
+                            editingProduk = produk
+                            showDialog = true
+                        }
+                        .padding(4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(6.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = produk.nama,
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                color = Color.Black
+                            )
+                            Text(
+                                text = "Qty: ${produk.quantity}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    produkDao.deleteProduk(produk)
+                                    Toast.makeText(context, "Produk dihapus", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Hapus",
+                                tint = Color.Red,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Dialog untuk Tambah/Edit Produk
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = {
+                Text(
+                    text = if (editingProduk == null) "Tambah Produk" else "Edit Produk",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = namaProduk,
+                        onValueChange = { namaProduk = it },
+                        label = { Text("Nama Produk") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = quantityProduk,
+                        onValueChange = { quantityProduk = it },
+                        label = { Text("Quantity") },
+                        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val produk = Produk(
+                                id = editingProduk?.id ?: 0,
+                                nama = namaProduk,
+                                quantity = quantityProduk.toIntOrNull() ?: 0
+                            )
+                            if (editingProduk == null) {
+                                produkDao.insertProduk(produk)
+                                Toast.makeText(context, "Produk ditambahkan", Toast.LENGTH_SHORT).show()
+                            } else {
+                                produkDao.updateProduk(produk)
+                                Toast.makeText(context, "Produk diperbarui", Toast.LENGTH_SHORT).show()
+                            }
+                            showDialog = false
+                            namaProduk = ""
+                            quantityProduk = ""
+                            editingProduk = null
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B))
+                ) {
+                    Text(
+                        text = if (editingProduk == null) "Tambah" else "Simpan",
+                        color = Color.White
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("Batal", color = Color.Red)
+                }
+            }
+        )
     }
 }
 
