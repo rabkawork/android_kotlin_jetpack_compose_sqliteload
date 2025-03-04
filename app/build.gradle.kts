@@ -41,6 +41,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.runtime.livedata)
     val room_version = "2.6.1" // Gunakan versi terbaru
 
     implementation("androidx.room:room-runtime:$room_version")

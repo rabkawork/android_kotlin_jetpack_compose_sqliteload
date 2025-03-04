@@ -20,7 +20,7 @@
         android:theme="@style/Theme.Kotlinsqlite"
         tools:targetApi="31">
         <activity
-            android:name=".MainActivity"
+            android:name=".BackupActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Kotlinsqlite">
@@ -30,6 +30,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".MainActivity"></activity>
     </application>
 
 </manifest>
