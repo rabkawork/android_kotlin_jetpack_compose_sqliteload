@@ -52,16 +52,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import com.example.kotlinsqlite.restapi.ApiService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 
 @Entity(tableName = "master_produk")
@@ -196,6 +204,7 @@ abstract class ProdukDatabase : RoomDatabase() {
                 "produk.db-shm",
                 "produk.db-wal"
             )
+            val copiedFiles = mutableListOf<File>()
 
             dbFiles.forEach { fileName ->
                 val sourceFile = File(context.getDatabasePath("produk.db").parent, fileName)
@@ -208,6 +217,9 @@ abstract class ProdukDatabase : RoomDatabase() {
                                 input.copyTo(output)
                             }
                         }
+                        copiedFiles.add(destFile)
+
+
                         Log.d("ExportDatabase", "Berhasil menyalin $fileName ke ${destFile.absolutePath}")
                         Toast.makeText(context, "Berhasil menyalin $fileName ke ${destFile.absolutePath}", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
@@ -222,6 +234,20 @@ abstract class ProdukDatabase : RoomDatabase() {
                     Log.w("ExportDatabase", "File $fileName tidak ditemukan, dilewati")
                     Toast.makeText(context, "File $fileName tidak ditemukan, dilewati", Toast.LENGTH_SHORT).show()
 
+                }
+            }
+
+            if (copiedFiles.isNotEmpty()) {
+                val zipFile = File(downloadDir, "produk_backup_$timestamp.zip")
+                if (zipFiles(zipFile, copiedFiles)) {
+                    uploadZipToServer(context, zipFile)
+                    Log.d("ExportDatabase", "File ZIP berhasil dibuat: ${zipFile.absolutePath}")
+                    Toast.makeText(context, "Backup berhasil! ZIP: ${zipFile.absolutePath}", Toast.LENGTH_SHORT).show()
+
+                    // 🔄 Kirim ZIP ke server
+                } else {
+                    Log.e("ExportDatabase", "Gagal membuat file ZIP")
+                    Toast.makeText(context, "Gagal membuat file ZIP", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -322,10 +348,6 @@ fun downloadAndReplaceDatabase(context: Context, fileUrl: String, fileName: Stri
                                     withContext(Dispatchers.Main) {
                                         ProdukDatabase.moveDownloadedDatabaseFile(context, Uri.parse(it), fileName)
                                         ProdukDatabase.refreshDatabase(context) // 🔄 Paksa reload database setelah mengganti
-
-
-
-
                                     }
                                 }
                             }
@@ -344,6 +366,58 @@ fun downloadAndReplaceDatabase(context: Context, fileUrl: String, fileName: Stri
     } catch (e: Exception) {
         Log.e("Download", "Error: ${e.message}", e)
         Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+
+fun uploadZipToServer(context: Context, zipFile: File) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val requestBody = zipFile.asRequestBody("application/zip".toMediaTypeOrNull())
+            val filePart = MultipartBody.Part.createFormData("file", zipFile.name, requestBody)
+
+            val retrofit = Retrofit.Builder()
+                .baseUrl("http://192.168.2.116:3000/") // Ganti dengan URL server kamu
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+
+            val apiService = retrofit.create(ApiService::class.java)
+            val response = apiService.uploadFile(filePart)
+
+            Log.d("response",response.toString())
+
+            withContext(Dispatchers.Main) {
+                if (response.isSuccessful) {
+                    Toast.makeText(context, "Upload berhasil!", Toast.LENGTH_SHORT).show()
+                    Log.d("UploadZIP", "Upload sukses: ${response.body()?.string()}")
+                } else {
+                    Toast.makeText(context, "Upload gagal!", Toast.LENGTH_SHORT).show()
+                    Log.e("UploadZIP", "Upload gagal: ${response.errorBody()?.string()}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("UploadZIP", "Error saat upload: ${e.message}")
+        }
+    }
+}
+
+
+fun zipFiles(zipFile: File, files: List<File>): Boolean {
+    return try {
+        ZipOutputStream(FileOutputStream(zipFile)).use { zipOut ->
+            files.forEach { file ->
+                FileInputStream(file).use { input ->
+                    val entry = ZipEntry(file.name)
+                    zipOut.putNextEntry(entry)
+                    input.copyTo(zipOut)
+                    zipOut.closeEntry()
+                }
+            }
+        }
+        true
+    } catch (e: Exception) {
+        Log.e("ZipFiles", "Gagal membuat ZIP: ${e.message}")
+        false
     }
 }
 
