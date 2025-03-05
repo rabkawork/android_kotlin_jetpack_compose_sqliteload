@@ -42,6 +42,7 @@
         </activity>
 
         <activity android:name=".MainActivity"></activity>
+        <activity android:name=".ExampleActivity"></activity>
     </application>
 
 </manifest>

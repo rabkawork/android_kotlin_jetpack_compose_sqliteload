@@ -52,7 +52,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
@@ -157,7 +161,10 @@ abstract class ProdukDatabase : RoomDatabase() {
                     Log.e("ProdukDatabase", "File database tidak ditemukan setelah replace!") // ❌ Error jika file tidak ada
                 }
 
-                // Hapus instance agar Room membaca ulang DB
+                // Reverse INSTANCE menjadi null -> karena menggunakan database baru
+
+                Log.d("moveDatabaseFile", "Instance value berhasil direverse, instance siap melakukan operasi SQL")
+
                 INSTANCE = null
 
                 // Tampilkan pesan sukses
@@ -219,146 +226,126 @@ abstract class ProdukDatabase : RoomDatabase() {
             }
         }
 
-
-        fun moveDatabaseFile(context: Context, fileUri: Uri, fileName: String) {
-            val databasePath = File(context.getDatabasePath("produk.db").parent) // Lokasi database
-            val newDatabaseFile = File(databasePath, "produk.db")
+        fun moveDownloadedDatabaseFile(context: Context, downloadedUri: Uri, fileName: String) {
+            val dbFile = context.getDatabasePath("produk.db")
+            val shmFile = File(dbFile.absolutePath + "-shm")
+            val walFile = File(dbFile.absolutePath + "-wal")
 
             try {
-                context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                    // Hapus database lama sebelum mengganti
-                    deleteOldDatabase(databasePath)
+                // Hapus database lama jika ada
+                if (dbFile.exists()) dbFile.delete()
+                if (shmFile.exists()) shmFile.delete()
+                if (walFile.exists()) walFile.delete()
 
-                    // Copy file ke lokasi database aplikasi
-                    FileOutputStream(newDatabaseFile).use { outputStream ->
+                // Salin database baru ke lokasi database aplikasi
+                context.contentResolver.openInputStream(downloadedUri)?.use { inputStream ->
+                    FileOutputStream(dbFile).use { outputStream ->
                         inputStream.copyTo(outputStream)
                     }
-
-                    Log.d("Database", "File SQLite berhasil disalin ke: ${newDatabaseFile.absolutePath}")
-
-
-
-                    Log.d("Database", "File SQLite berhasil disalin ke: ${newDatabaseFile.absolutePath}")
-
-                    // **Panggil reopenDatabase() setelah penggantian selesai**
-                    reopenDatabase(context)
-
-
                 }
-            } catch (e: Exception) {
-                Log.e("Database", "Gagal memindahkan file database: ${e.message}")
+
+                Log.d("moveDatabaseFile", "Database berhasil dipindahkan ke: ${dbFile.absolutePath}")
+
+                // Reset instance agar Room membaca ulang database yang baru
+                ProdukDatabase.closeDatabase()
+
+                Toast.makeText(context, "Database berhasil diperbarui", Toast.LENGTH_SHORT).show()
+            } catch (e: IOException) {
+                Log.e("moveDatabaseFile", "Gagal mengganti database: ${e.message}")
+                Toast.makeText(context, "Gagal mengganti database", Toast.LENGTH_SHORT).show()
             }
         }
 
-        fun deleteOldDatabase(databasePath: File) {
-            val filesToDelete = listOf("produk.db", "produk.db-shm", "produk.db-wal")
-            for (fileName in filesToDelete) {
-                val file = File(databasePath, fileName)
-                if (file.exists()) {
-                    file.delete()
-                    Log.d("Database", "Deleted: ${file.absolutePath}")
+
+
+        fun refreshDatabase(context: Context) {
+
+            CoroutineScope(Dispatchers.IO).launch {
+
+                // Pastikan instance Room ditutup terlebih dahulu
+                ProdukDatabase.closeDatabase()
+
+                // Buat ulang instance Room agar membaca database baru
+                ProdukDatabase.getDatabase(context)
+                val newDb = ProdukDatabase.getDatabase(context)
+
+                withContext(Dispatchers.Main) {
+                    if (newDb != null) {
+                        Log.d("refreshDatabase", "Database baru berhasil di-load.")
+
+                        // Restart Activity hanya setelah database selesai dibuat
+                        val intent = (context as? ComponentActivity)?.intent
+                        intent?.let {
+                            context.finish()
+                            context.startActivity(it)
+                        }
+
+                        Log.d("refreshDatabase", "Database telah direfresh dan siap digunakan kembali.")
+                        Toast.makeText(context, "Database berhasil diperbarui dan direfresh", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Log.e("refreshDatabase", "Gagal memuat ulang database!")
+                        Toast.makeText(context, "Terjadi kesalahan saat memuat database", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
+
+
         }
 
-        fun reopenDatabase(context: Context) {
-            val dbPath = context.getDatabasePath("produk.db")
-            if (dbPath.exists()) {
-                Log.d("Database", "Database berhasil diganti, siap digunakan!")
-                // Tambahkan kode untuk membuka database dan membaca data di sini
-            } else {
-                Log.e("Database", "Database tidak ditemukan setelah proses penggantian!")
-            }
-        }
     }
 }
 
-
-//fun downloadAndReplaceDatabase(context: Context, fileUrl: String, fileName: String) {
-//    val request = DownloadManager.Request(Uri.parse(fileUrl))
-//        .setTitle("Downloading SQLite Database")
-//        .setDescription("Downloading $fileName")
-//        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-//        .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
-//
-//    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-//    val downloadId = downloadManager.enqueue(request)
-//
-//    // Cek jika download selesai
-//    val query = DownloadManager.Query().setFilterById(downloadId)
-//    val cursor = downloadManager.query(query)
-//
-//    if (cursor.moveToFirst()) {
-//        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-//        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-//            val uriString = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-//            uriString?.let { ProdukDatabase.moveDatabaseFile(context, Uri.parse(it), fileName) }
-//        }
-//    }
-//    cursor.close()
-//}
-
-
 fun downloadAndReplaceDatabase(context: Context, fileUrl: String, fileName: String) {
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val request = DownloadManager.Request(Uri.parse(fileUrl))
+        .setTitle("produk")
+        .setDescription("Downloading $fileName")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(true)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+
     try {
-        val request = DownloadManager.Request(Uri.parse(fileUrl))
-            .setTitle("Downloading SQLite Database")
-            .setDescription("Downloading $fileName")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-
-        try {
-            val downloadId = downloadManager.enqueue(request)
-
-            // Monitor download status
+        val downloadId = downloadManager.enqueue(request)
+        CoroutineScope(Dispatchers.IO).launch {
+            var downloading = true
             val query = DownloadManager.Query().setFilterById(downloadId)
-            Thread {
-                var downloading = true
-                while (downloading) {
-                    val cursor = downloadManager.query(query)
-                    cursor.moveToFirst()
 
-                    if (cursor.count > 0) {
-                        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                        when (status) {
+            while (downloading) {
+                downloadManager.query(query).use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                             DownloadManager.STATUS_SUCCESSFUL -> {
                                 downloading = false
                                 val uriString = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
                                 uriString?.let {
-                                    (context as? ComponentActivity)?.runOnUiThread {
-                                        ProdukDatabase.moveDatabaseFile(context, Uri.parse(it), fileName)
-                                        Toast.makeText(context, "Download berhasil", Toast.LENGTH_SHORT).show()
+                                    withContext(Dispatchers.Main) {
+                                        ProdukDatabase.moveDownloadedDatabaseFile(context, Uri.parse(it), fileName)
+                                        ProdukDatabase.refreshDatabase(context) // 🔄 Paksa reload database setelah mengganti
+
+
+
+
                                     }
                                 }
                             }
                             DownloadManager.STATUS_FAILED -> {
                                 downloading = false
-                                (context as? ComponentActivity)?.runOnUiThread {
+                                withContext(Dispatchers.Main) {
                                     Toast.makeText(context, "Download gagal", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
                     }
-                    cursor.close()
-                    Thread.sleep(1000)
                 }
-            }.start()
-
-        } catch (e: SecurityException) {
-            Log.e("Download", "Security Exception: ${e.message}")
-            Toast.makeText(context, "Error: Tidak ada izin untuk download", Toast.LENGTH_LONG).show()
+                delay(1000) // Delay agar tidak blocking
+            }
         }
-
     } catch (e: Exception) {
-        Log.e("Download", "Error: ${e.message}")
+        Log.e("Download", "Error: ${e.message}", e)
         Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
-
 
 
 
@@ -382,6 +369,7 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
 
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
+            Log.d("checkimport",it.toString())
             ProdukDatabase.replaceDatabase(context, it) // Gunakan context dari LocalContext
             refreshDb(it) // Paksa reload database
         }
@@ -392,17 +380,7 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
             TopAppBar(
                 title = { Text("Daftar Produk") },
                 actions = {
-//                    Button(onClick = { filePickerLauncher.launch("*/*") }) {
-//                        Text("Import SQLITE")
-//                    }
-//
-//                    Button(onClick = {
-//                        val fileUrl = "http://192.168.2.116:3000/download/produk.db"
-//                        val fileName = "produk.db"
-//                        downloadAndReplaceDatabase(context, fileUrl, fileName)
-//                    }) {
-//                        Text("Download")
-//                    }
+
 
                     Row(
                         modifier = Modifier.padding(end = 8.dp),
@@ -625,40 +603,8 @@ fun ProdukScreen(db: ProdukDatabase, refreshDb: (Uri?) -> Unit) {
 
 class BackupActivity : ComponentActivity() {
 
-
-    private val PERMISSION_REQUEST_CODE = 123
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions.all { it.value }) {
-            Toast.makeText(this, "Semua izin diberikan", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Beberapa izin ditolak", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun checkPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val permissions = arrayOf(
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                android.Manifest.permission.INTERNET
-            )
-
-            val permissionsToRequest = permissions.filter {
-                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-            }.toTypedArray()
-
-            if (permissionsToRequest.isNotEmpty()) {
-                requestPermissionLauncher.launch(permissionsToRequest)
-            }
-        }
-    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        checkPermissions()
-
         setContent {
             var db by remember { mutableStateOf(ProdukDatabase.getDatabase(this)) }
             val context = this@BackupActivity // ✅ Gunakan context yang benar

@@ -53,6 +53,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-text-google-fonts:1.5.4") // Versi terbaru
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
+    implementation("androidx.compose.material:material:1.5.4")  // versi dapat disesuaikan
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
